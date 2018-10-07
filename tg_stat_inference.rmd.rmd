@@ -1,0 +1,151 @@
+---
+title: "Tooth Growth Statistical Inference"
+output: pdf_document
+---
+
+```{r preamble, include=FALSE}
+# install.packages("tinytex")
+# install.packages("ggplot2")
+# install.packages("dplyr")
+# install.packages("reshape2")
+
+library(tinytex)
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+```
+
+## Background
+
+We investigate the effective Vitamin C on the tooth grow in Guinea pigs, using R's `ToothGrowth` dataset in the `datasets` package, which records the lengths of odontoblasts (cells responsible for tooth growth) in 60 Guinea pigs. Each animal received one of three dose levels of vitamin C (0.5, 1, and 2 mg/day) by one of two delivery methods, orange juice (coded as `OJ`) or ascorbic acid (a form of vitamin C and coded as `VC`).
+
+We set out to uncover the statistical correlation between the type/dose of supplements, and the tooth growth in Guinea pigs.
+
+For this analysis, we will use a standard level of significance, $\alpha = 0.05$, and will be making inferences based on the p-value for simplicity.
+
+## Data Summary
+
+We begin with a summary of the dataset. There are 60 observations in total.
+```{r}
+data("ToothGrowth")
+str(ToothGrowth)
+summary(ToothGrowth)
+```
+
+There are two types of supplements (`OJ` and `VC`), and three different doses (0.5, 1.0, and 2.0). There are 10 observations for each supplement-dose combination. The dataset is balanced albeit small in size.
+
+```{r}
+with(ToothGrowth, table(dose, supp))
+```
+
+
+
+## General Comparison
+
+We begin with a comparison between the two groups of Guinea pigs receiving different types of supplement. The observations are of 60 individual animals, the observations are hence unpaired. We also do not have sufficient evidence to believe the variance to be equal between groups.
+
+We begin with a two-tailed T-test (i.e., null hypothesis: the type of supplement is not associated with tooth growth).
+
+```{r}
+t.test(len ~ supp,
+       paired = FALSE,
+       var.equal = FALSE,
+       data = ToothGrowth)
+```
+
+We are unable to reject the null hypothesis that different types of supplements are associated with equal outcome.
+
+However, if we switch to a one-tailed test, thereby doubling the rejection region in either tail, our observation becomes significant. In this case, our alternative hypothesis is that group `OJ` correlates with increased tooth growth. We reject the null hypothesis in favour of our one-tailed alternative hypothesis.
+
+```{r}
+t.test(len ~ supp,
+       paired = FALSE,
+       var.equal = FALSE,
+       data = ToothGrowth,
+       alternative = "greater")
+```
+
+## Effect of Dosage, Controlling for Type of Supplement
+
+We begin by filtering the dataset by the type of supplement.
+
+```{r}
+tg_oj <- filter(ToothGrowth, supp == "OJ")
+tg_vc <- filter(ToothGrowth, supp == "VC")
+```
+
+Since each group receives 3 different doses, 0.5, 1.0, and 2.0mg/day, we should conduct three individual two-sample T-tests (with unequal variance) to fully understand the correlation between dosage and tooth growth.
+
+This is equivalent to the `pairwise.t.test()` function, if we do not adjust for P-values, and use non-pooled variances.
+
+```{r}
+# Pair-wise T-test Function
+pwtt_tg <- function(data_arg, alt_arg) {
+  with(data_arg,
+       pairwise.t.test(len,
+                       dose,
+                       p.adjust.method = "none",
+                       alternative = alt_arg,
+                       pool.sd = FALSE
+       ))
+}
+
+pwtt_tg(tg_vc, "two.sided")
+pwtt_tg(tg_vc, "greater")
+```
+
+Hence, for the `VC` group, increased dosage is associated with increased tooth growth. The same is observed in the `OJ` group.
+
+```{r}
+
+pwtt_tg(tg_oj, "two.sided")
+pwtt_tg(tg_oj, "greater")
+```
+
+## Effect of Type of Supplement Controlling for Dosage
+
+We slice the dataset based on the dosage.
+
+```{r}
+tg_half <- filter(ToothGrowth, dose == 0.5)
+tg_one <- filter(ToothGrowth, dose == 1)
+tg_two <- filter(ToothGrowth, dose == 2)
+
+ttest_dose <- function(data_arg, alt_arg){
+  t.test(len ~ supp,
+         paired = FALSE,
+         var.equal = FALSE,
+         data = data_arg,
+         alternative = alt_arg
+  )
+}
+```
+
+For 0.5mg/day:
+```{r}
+ttest_dose(tg_half, "two.sided")
+ttest_dose(tg_half, "greater")
+```
+
+For 1.0mg/day:
+```{r}
+ttest_dose(tg_one, "two.sided")
+ttest_dose(tg_one, "greater")
+```
+
+For 2.0mg/day:
+```{r}
+ttest_dose(tg_two, "two.sided")
+ttest_dose(tg_two, "greater")
+```
+
+## Conclusion
+In general, there is some evidence that Vitamin C delivered through orange juice is associated with more tooth growth than through absorbic acid.
+
+On the other hand, there is strong evidence showing that increased dosage correlates with increased tooth growth, for both `OJ` and `VC` groups.
+
+If we control for doses, at 0.5 and 1.0mg/day, `OJ` is linked to increased tooth growth relative to `VC`. Nevertheless, at 2.0mg/day, there appears to be no difference between the two types of supplement.
+
+
+
+
